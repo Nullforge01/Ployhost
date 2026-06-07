@@ -12,18 +12,27 @@ export default function Home() {
   useEffect(() => { checkUser() }, [])
 
   async function checkUser() {
-    const res = await fetch('/api/me')
-    if (res.ok) setUser(await res.json())
+    try {
+      const res = await fetch('/api/me')
+      if (res.ok) setUser(await res.json())
+    } catch (e) {
+      console.error(e)
+    }
     setLoading(false)
   }
 
   async function sendMagicLink() {
     setMsg('Sending link...')
-    const res = await fetch('/api/auth/email', {
-      method: 'POST', 
-      body: JSON.stringify({ email })
-    })
-    setMsg(res.ok ? 'Check your email for the login link' : 'Error sending link')
+    try {
+      const res = await fetch('/api/auth/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ email })
+      })
+      setMsg(res.ok ? 'Check your email for the login link' : 'Error sending link')
+    } catch (e) {
+      setMsg('Error sending link')
+    }
   }
 
   async function logout() {
@@ -47,7 +56,9 @@ export default function Home() {
       <button 
         onClick={sendMagicLink}
         className="w-full p-3 rounded bg-blue-600 hover:bg-blue-500 font-medium"
-      >Send Magic Link</button>
+      >
+        Send Magic Link
+      </button>
       {msg && <p className="mt-4 text-sm text-zinc-400">{msg}</p>}
       <div data-ea-publisher="ployhost" data-ea-type="text" className="mt-12"></div>
     </div>
@@ -86,4 +97,4 @@ export default function Home() {
       <div data-ea-publisher="ployhost" data-ea-type="text" className="mt-12"></div>
     </div>
   )
-                            }
+}
