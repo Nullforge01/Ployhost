@@ -1,60 +1,49 @@
 import { kv } from '@vercel/kv'
-import { jwtVerify, SignJWT } from 'jose'
+import { verifyToken } from './auth'
+import { cookies } from 'next/headers'
 
-export const LIMITS = { sites: 3, deploys: 12, bw: 20, storage: 100 }
-const secret = new TextEncoder().encode(process.env.AUTH_SECRET!)
+export { kv }
 
-export type UserData = {
-  email: string
-  sites: { name: string, url: string, created: number }[]
-  deploys: { [month: string]: number }
-  bw: { [month: string]: number }
-  created: number
-}
-
-export async function createToken(email: string) {
-  return await new SignJWT({ email })
-   .setProtectedHeader({ alg: 'HS256' })
-   .setExpirationTime('30d')
-   .sign(secret)
-}
-
-export async function getUser(req: Request) {
-  const token = req.headers.get('cookie')?.split('ployhost_session=')[1]?.split(';')[0]
+export async function getUser(req?: Request): Promise<string | null> {
+  const token = cookies().get('token')?.value
   if (!token) return null
-  try {
-    const { payload } = await jwtVerify(token, secret)
-    return payload.email as string
-  } catch { return null }
+  return await verifyToken(token)
 }
 
-export async function getUserData(email: string): Promise<UserData> {
-  const data = await kv.get<UserData>(`user:${email}`)
-  return data || { email, sites: [], deploys: {}, bw: {}, created: Date.now() }
+export async function getUserData(email: string) {
+  const user = await kv.get(`user:${email}`)
+  if (user) return user
+  
+  const newUser = {
+    email,
+    plan: 'free',
+    sites: [],
+    deploys: [],
+    created: Date.now()
+  }
+  await kv.set(`user:${email}`, newUser)
+  return newUser
 }
 
 export async function canDeploy(email: string) {
   const user = await getUserData(email)
-  const month = new Date().toISOString().slice(0,7)
-  const used = user.deploys[month] || 0
-  if (user.sites.length >= LIMITS.sites) return { ok: false, reason: 'Site limit reached' }
-  if (used >= LIMITS.deploys) return { ok: false, reason: 'Deploy limit reached' }
+  const now = Date.now()
+  const dayAgo = now - 24 * 60 * 60 * 1000
+  
+  const deploysToday = user.deploys.filter((t: number) => t > dayAgo).length
+  
+  if (user.plan === 'free' && deploysToday >= 5) {
+    return { ok: false, reason: 'Daily limit reached. 5 deploys/day on Free plan.' }
+  }
+  if (user.sites.length >= 3 && user.plan === 'free') {
+    return { ok: false, reason: 'Site limit reached. 3 sites max on Free plan.' }
+  }
+  
   return { ok: true }
 }
 
 export async function trackDeploy(email: string) {
   const user = await getUserData(email)
-  const month = new Date().toISOString().slice(0,7)
-  user.deploys[month] = (user.deploys[month] || 0) + 1
+  user.deploys.push(Date.now())
   await kv.set(`user:${email}`, user)
-}
-
-export async function checkBandwidth(email: string, bytes: number) {
-  const user = await getUserData(email)
-  const month = new Date().toISOString().slice(0,7)
-  const used = (user.bw[month] || 0) + bytes
-  if (used > LIMITS.bw * 1e9) return false
-  user.bw[month] = used
-  await kv.set(`user:${email}`, user)
-  return true
 }
