@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       subject: 'Your PloyHost login link',
       html: `
         <h2>Sign in to PloyHost</h2>
-        <p>Click below to sign in. Link expires in 10 minutes.</p>
+        <p>Click below to sign in. Link expires in 7 days.</p>
         <a href="${url}" style="background:#000;color:#fff;padding:12px 20px;text-decoration:none;border-radius:6px;display:inline-block">Sign in to PloyHost</a>
         <p style="color:#666;font-size:12px;margin-top:20px">If you didn't request this, ignore this email.</p>
       `
@@ -29,6 +29,7 @@ export async function POST(req: Request) {
     
     return NextResponse.json({ ok: true })
   } catch (e) {
+    console.error('Resend error:', e)
     return NextResponse.json({ error: 'Failed to send email' }, { status: 500 })
   }
 }
